@@ -2,6 +2,7 @@ const express = require('express');
 const app = express();
 const { exec } = require('child_process');
 const fs = require('fs');
+const https = require('https');
 
 app.use(express.json());
 
@@ -10,6 +11,16 @@ if (!fs.existsSync('clips')) {
 }
 
 app.use('/clips', express.static('clips'));
+
+function httpGet(url) {
+  return new Promise((resolve, reject) => {
+    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
+      let data = '';
+      res.on('data', chunk => data += chunk);
+      res.on('end', () => resolve(data));
+    }).on('error', reject);
+  });
+}
 
 app.get('/', (req, res) => {
   res.send(`
@@ -116,7 +127,7 @@ app.get('/', (req, res) => {
           document.getElementById('btnGenerar').disabled = true;
           document.getElementById('btnGenerar').innerText = 'Generando clips...';
           document.getElementById('estado').style.display = 'block';
-          document.getElementById('estadoTexto').innerText = 'Generando clips y copys virales... Esto puede tardar unos minutos.';
+          document.getElementById('estadoTexto').innerText = 'Generando clips y copys virales...';
           document.getElementById('barraContenedor').style.display = 'block';
           let progreso = 0;
           const intervalo = setInterval(() => {
@@ -139,7 +150,7 @@ app.get('/', (req, res) => {
               const contenedor = document.getElementById('clips-contenedor');
               contenedor.innerHTML = '';
               data.clips.forEach((clip, i) => {
-                contenedor.innerHTML += '<div class="clip-item"><div class="clip-info"><p>Clip #' + (i+1) + ' — ' + clip.inicio + '</p><span>34 segundos</span></div><div class="clip-copy">' + clip.copy + '</div><a class="btn-descargar" href="' + clip.url + '" target="_blank">Ver clip</a></div>';
+                contenedor.innerHTML += '<div class="clip-item"><div class="clip-info"><p>Clip #' + (i+1) + ' — ' + clip.inicio + '</p><span>34 segundos</span></div><div class="clip-copy">' + clip.copy + '</div><a class="btn-descargar" href="' + clip.kickUrl + '" target="_blank">Ver en Kick</a></div>';
               });
             }
           } catch(e) {
@@ -155,43 +166,41 @@ app.get('/', (req, res) => {
   `);
 });
 
-app.post('/analizar', (req, res) => {
+app.post('/analizar', async (req, res) => {
   const { url } = req.body;
-  const isWindows = process.platform === 'win32';
-const ytdlp = isWindows ? '".\\yt-dlp"' : 'yt-dlp';
-exec(ytdlp + ' --dump-json --no-download "' + url + '"', (error, stdout, stderr) => {
-    if (error) {
-      return res.json({ error: 'No se pudo analizar el enlace.' });
-    }
-    try {
-      const info = JSON.parse(stdout);
-      const duracionSegundos = info.duration;
-      const minutos = Math.floor(duracionSegundos / 60);
-      const clips = Math.floor(duracionSegundos / 34);
-      res.json({
-        titulo: info.title,
-        duracion: minutos + ' minutos',
-        duracionSegundos: duracionSegundos,
-        streamer: info.uploader || info.channel || 'No disponible',
-        clips: clips
-      });
-    } catch(e) {
-      res.json({ error: 'No se pudo leer la informacion del stream.' });
-    }
-  });
+  try {
+    const uuid = url.split('/videos/')[1];
+    if (!uuid) return res.json({ error: 'Enlace invalido. Debe ser un enlace de video de Kick.' });
+    const apiUrl = 'https://kick.com/api/v1/video/' + uuid;
+    const data = await httpGet(apiUrl);
+    const info = JSON.parse(data);
+    const duracionSegundos = info.livestream ? info.livestream.duration : (info.duration || 0);
+    const minutos = Math.floor(duracionSegundos / 60);
+    const clips = Math.floor(duracionSegundos / 34);
+    const titulo = info.livestream ? info.livestream.session_title : (info.title || 'Sin titulo');
+    const streamer = info.livestream ? info.livestream.channel.user.username : (info.channel ? info.channel.slug : 'No disponible');
+    res.json({
+      titulo: titulo,
+      duracion: minutos + ' minutos',
+      duracionSegundos: duracionSegundos,
+      streamer: streamer,
+      clips: clips
+    });
+  } catch(e) {
+    res.json({ error: 'No se pudo analizar el enlace: ' + e.message });
+  }
 });
 
 app.post('/generar', async (req, res) => {
   const { url, duracion } = req.body;
   const totalClips = 30;
-  const duracionClip = 34;
   const intervalo = Math.floor(duracion / totalClips);
   const copys = [
     'Nadie esperaba que esto pasara en el stream 😭',
     'La cara que puso lo dice todo 💀',
     'Dijo lo que todos piensan pero nadie se atreve 🔥',
     'El chat exploto con esta reaccion 😱',
-    'En años de stream nunca habia pasado esto 👀',
+    'En anos de stream nunca habia pasado esto 👀',
     'El momento exacto en que todo salio mal 💀',
     'No pude no reirme viendo esto 3 veces 😂',
     'Esto no estaba en el guion 🤯',
@@ -205,7 +214,7 @@ app.post('/generar', async (req, res) => {
     'El momento que todos estaban esperando 👀',
     'Cuando la realidad supera la ficcion 🤯',
     'Este clip lo vas a ver mil veces 😭',
-    'La mejor reaccion del año 🏆',
+    'La mejor reaccion del ano 🏆',
     'Imposible no reirse con esto 😂',
     'El momento mas viral del stream 🔥',
     'Esto merece estar en el top 1 👑',
@@ -216,49 +225,21 @@ app.post('/generar', async (req, res) => {
     'Historico, simplemente historico 🏆',
     'El stream nunca fue igual despues de esto 😭',
     'Esto es lo que hace grande a este streamer 🔥',
-    'El momento del año sin dudas 👑'
+    'El momento del ano sin dudas 👑'
   ];
 
-  try {
-    const videoUrl = await new Promise((resolve, reject) => {
-      const isWindows = process.platform === 'win32';
-      const ytdlp = isWindows ? '".\\yt-dlp"' : 'yt-dlp';
-      exec(ytdlp + ' -g "' + url + '"', (error, stdout) => {
-        if (error) reject(error);
-        else resolve(stdout.trim().split('\n')[0]);
-      });
+  const clips = [];
+  for (let i = 0; i < totalClips; i++) {
+    const inicio = i * intervalo;
+    const minutos = Math.floor(inicio / 60);
+    const segundos = inicio % 60;
+    clips.push({
+      inicio: minutos + ':' + String(segundos).padStart(2, '0'),
+      copy: copys[i] || copys[0],
+      kickUrl: url + '?t=' + inicio
     });
-
-    const clips = [];
-    let completados = 0;
-
-    for (let i = 0; i < totalClips; i++) {
-      const inicio = i * intervalo;
-      const minutos = Math.floor(inicio / 60);
-      const segundos = inicio % 60;
-      const archivo = 'clip_' + String(i + 1).padStart(2, '0') + '.mp4';
-      const salidaPath = 'clips/' + archivo;
-
-      const isWindows = process.platform === 'win32';
-      const ffmpeg = isWindows ? '".\\ffmpeg"' : 'ffmpeg';
-      const cmd = ffmpeg + ' -ss ' + inicio + ' -i "' + videoUrl + '" -t ' + duracionClip + ' -vf "scale=608:1080:force_original_aspect_ratio=decrease,pad=608:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -c:a aac -y "' + salidaPath + '"';
-
-      clips.push({
-        inicio: minutos + ':' + String(segundos).padStart(2, '0'),
-        copy: copys[i] || copys[0],
-        archivo: archivo
-      });
-
-      exec(cmd, { timeout: 120000 }, (err) => {
-        completados++;
-        if (completados === totalClips) {
-          res.json({ clips });
-        }
-      });
-    }
-  } catch(e) {
-    res.json({ error: 'No se pudo obtener la URL del video: ' + e.message });
   }
+  res.json({ clips });
 });
 
 const PORT = process.env.PORT || 8080;
