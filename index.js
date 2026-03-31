@@ -180,7 +180,7 @@ app.post('/analizar', (req, res) => {
 });
 
 app.post('/generar', async (req, res) => {
-  const { url, duracion, titulo, streamer } = req.body;
+  const { url, duracion } = req.body;
   const totalClips = 30;
   const duracionClip = 34;
   const intervalo = Math.floor(duracion / totalClips);
@@ -217,20 +217,46 @@ app.post('/generar', async (req, res) => {
     'El momento del año sin dudas 👑'
   ];
 
-  const clips = [];
-  for (let i = 0; i < totalClips; i++) {
-    const inicio = i * intervalo;
-    const minutos = Math.floor(inicio / 60);
-    const segundos = inicio % 60;
-    clips.push({
-      inicio: minutos + ':' + String(segundos).padStart(2, '0'),
-      inicioSegundos: inicio,
-      copy: copys[i] || copys[0],
-      url: url + '?t=' + inicio
+  try {
+    const videoUrl = await new Promise((resolve, reject) => {
+      const isWindows = process.platform === 'win32';
+      const ytdlp = isWindows ? '".\\yt-dlp"' : 'yt-dlp';
+      exec(ytdlp + ' -g "' + url + '"', (error, stdout) => {
+        if (error) reject(error);
+        else resolve(stdout.trim().split('\n')[0]);
+      });
     });
-  }
 
-  res.json({ clips });
+    const clips = [];
+    let completados = 0;
+
+    for (let i = 0; i < totalClips; i++) {
+      const inicio = i * intervalo;
+      const minutos = Math.floor(inicio / 60);
+      const segundos = inicio % 60;
+      const archivo = 'clip_' + String(i + 1).padStart(2, '0') + '.mp4';
+      const salidaPath = 'clips/' + archivo;
+
+      const isWindows = process.platform === 'win32';
+      const ffmpeg = isWindows ? '".\\ffmpeg"' : 'ffmpeg';
+      const cmd = ffmpeg + ' -ss ' + inicio + ' -i "' + videoUrl + '" -t ' + duracionClip + ' -vf "scale=608:1080:force_original_aspect_ratio=decrease,pad=608:1080:(ow-iw)/2:(oh-ih)/2" -c:v libx264 -c:a aac -y "' + salidaPath + '"';
+
+      clips.push({
+        inicio: minutos + ':' + String(segundos).padStart(2, '0'),
+        copy: copys[i] || copys[0],
+        archivo: archivo
+      });
+
+      exec(cmd, { timeout: 120000 }, (err) => {
+        completados++;
+        if (completados === totalClips) {
+          res.json({ clips });
+        }
+      });
+    }
+  } catch(e) {
+    res.json({ error: 'No se pudo obtener la URL del video: ' + e.message });
+  }
 });
 
 const PORT = process.env.PORT || 3000;
