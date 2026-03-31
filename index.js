@@ -174,11 +174,11 @@ app.post('/analizar', async (req, res) => {
     const apiUrl = 'https://kick.com/api/v1/video/' + uuid;
     const data = await httpGet(apiUrl);
     const info = JSON.parse(data);
-    const duracionSegundos = info.livestream ? info.livestream.duration : (info.duration || 0);
+    const duracionSegundos = info.duration || (info.livestream && info.livestream.duration) || (info.video && info.video.duration) || 0;
     const minutos = Math.floor(duracionSegundos / 60);
     const clips = Math.floor(duracionSegundos / 34);
-    const titulo = info.livestream ? info.livestream.session_title : (info.title || 'Sin titulo');
-    const streamer = info.livestream ? info.livestream.channel.user.username : (info.channel ? info.channel.slug : 'No disponible');
+    const titulo = info.session_title || info.title || (info.livestream && info.livestream.session_title) || 'Sin titulo';
+    const streamer = (info.channel && info.channel.slug) || (info.livestream && info.livestream.channel && info.livestream.channel.user.username) || 'No disponible';
     res.json({
       titulo: titulo,
       duracion: minutos + ' minutos',
