@@ -157,7 +157,9 @@ app.get('/', (req, res) => {
 
 app.post('/analizar', (req, res) => {
   const { url } = req.body;
-  exec('".\\yt-dlp" --dump-json --no-download "' + url + '"', (error, stdout, stderr) => {
+  const isWindows = process.platform === 'win32';
+const ytdlp = isWindows ? '".\\yt-dlp"' : 'yt-dlp';
+exec(ytdlp + ' --dump-json --no-download "' + url + '"', (error, stdout, stderr) => {
     if (error) {
       return res.json({ error: 'No se pudo analizar el enlace.' });
     }
