@@ -1,8 +1,7 @@
 const express = require('express');
 const app = express();
-const { exec } = require('child_process');
 const fs = require('fs');
-const https = require('https');
+const youtubedl = require('youtube-dl-exec');
 
 app.use(express.json());
 
@@ -11,16 +10,6 @@ if (!fs.existsSync('clips')) {
 }
 
 app.use('/clips', express.static('clips'));
-
-function httpGet(url) {
-  return new Promise((resolve, reject) => {
-    https.get(url, { headers: { 'User-Agent': 'Mozilla/5.0' } }, (res) => {
-      let data = '';
-      res.on('data', chunk => data += chunk);
-      res.on('end', () => resolve(data));
-    }).on('error', reject);
-  });
-}
 
 app.get('/', (req, res) => {
   res.send(`
@@ -169,21 +158,19 @@ app.get('/', (req, res) => {
 app.post('/analizar', async (req, res) => {
   const { url } = req.body;
   try {
-    const uuid = url.split('/videos/')[1];
-    if (!uuid) return res.json({ error: 'Enlace invalido. Debe ser un enlace de video de Kick.' });
-    const apiUrl = 'https://kick.com/api/v1/video/' + uuid;
-    const data = await httpGet(apiUrl);
-    const info = JSON.parse(data);
-    const duracionSegundos = info.duration || (info.livestream && info.livestream.duration) || (info.video && info.video.duration) || 0;
+    const info = await youtubedl(url, {
+      dumpSingleJson: true,
+      noDownload: true,
+      noWarnings: true
+    });
+    const duracionSegundos = info.duration || 0;
     const minutos = Math.floor(duracionSegundos / 60);
     const clips = Math.floor(duracionSegundos / 34);
-    const titulo = info.session_title || info.title || (info.livestream && info.livestream.session_title) || 'Sin titulo';
-    const streamer = (info.channel && info.channel.slug) || (info.livestream && info.livestream.channel && info.livestream.channel.user.username) || 'No disponible';
     res.json({
-      titulo: titulo,
+      titulo: info.title || 'Sin titulo',
       duracion: minutos + ' minutos',
       duracionSegundos: duracionSegundos,
-      streamer: streamer,
+      streamer: info.uploader || info.channel || 'No disponible',
       clips: clips
     });
   } catch(e) {
