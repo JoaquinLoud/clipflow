@@ -161,7 +161,11 @@ app.post('/analizar', async (req, res) => {
     const info = await youtubedl(url, {
       dumpSingleJson: true,
       noDownload: true,
-      noWarnings: true
+      noWarnings: true,
+      addHeaders: [
+        'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Referer:https://kick.com'
+      ]
     });
     const duracionSegundos = info.duration || 0;
     const minutos = Math.floor(duracionSegundos / 60);
