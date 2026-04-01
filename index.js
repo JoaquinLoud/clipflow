@@ -158,13 +158,14 @@ app.get('/', (req, res) => {
 app.post('/analizar', async (req, res) => {
   const { url } = req.body;
   try {
-    const info = await youtubedl(url, {
+   const info = await youtubedl(url, {
       dumpSingleJson: true,
       noDownload: true,
       noWarnings: true,
       addHeaders: [
         'User-Agent:Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
-        'Referer:https://kick.com'
+        'Referer:https://kick.com',
+        'Cookie:kick_session=' + process.env.KICK_SESSION + '; XSRF-TOKEN=' + process.env.XSRF_TOKEN
       ]
     });
     const duracionSegundos = info.duration || 0;
